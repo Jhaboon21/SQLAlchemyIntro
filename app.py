@@ -1,23 +1,32 @@
 """Blogly application."""
 
 from flask import Flask, request, render_template, redirect, flash, session
-from models import db, connect_db, User
+from models import db, connect_db, User, Post
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql:///blogly'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ECHO'] = True
+app.config['SECRET_KEY'] = 'ihaveasecret'
 
 connect_db(app)
-if __name__ == "__main__":
+with app.app_context():
     db.create_all()
-    app.run(debug=True)
+#if __name__ == "__main__":
+    #db.create_all()
+    #app.run(debug=True)
 
 @app.route('/')
 def root():
     """Homepage redirects to list of users."""
 
     return redirect("/users")
+
+@app.errorhandler(404)
+def page_not_found(e):
+    """Show 404 NOT FOUND page."""
+
+    return render_template('404.html'), 404
 
 @app.route("/users")
 def home_page():
@@ -87,3 +96,67 @@ def users_destroy(user_id):
     db.session.commit()
 
     return redirect("/users")
+
+@app.route('/users/<int:user_id>/posts/new')
+def new_post_form(user_id):
+    """Show form to add a post for that user"""
+
+    user = User.query.get_or_404(user_id)
+    return render_template('posts/new.html', user=user)
+
+@app.route('/users/<int:user_id>/posts/new', methods=["POST"])
+def new_post(user_id):
+    """Handle add form; add post and redirect to the user detail page"""
+
+    user = User.query.get_or_404(user_id)
+    new_post = Post(
+        title=request.form['title'],
+        content=request.form['content'],
+        user=user)
+
+    db.session.add(new_post)
+    db.session.commit()
+    flash(f"Post '{new_post.title}' added.")
+    return redirect(f"/users/{user_id}")
+
+@app.route('/posts/<int:post_id>')
+def posts_show(post_id):
+    """Show a page with info on a specific user"""
+
+    post = Post.query.get_or_404(post_id)
+    return render_template('posts/show.html', post=post)
+
+@app.route('/posts/<int:post_id>/edit')
+def posts_edit(post_id):
+    """Show a form to edit an existing post"""
+
+    post = Post.query.get_or_404(post_id)
+    return render_template('posts/edit.html', post=post)
+
+
+@app.route('/posts/<int:post_id>/edit', methods=["POST"])
+def posts_update(post_id):
+    """Handle form submission for updating an existing post"""
+
+    post = Post.query.get_or_404(post_id)
+    post.title = request.form['title']
+    post.content = request.form['content']
+
+    db.session.add(post)
+    db.session.commit()
+    flash(f"Post '{post.title}' edited.")
+
+    return redirect(f"/users/{post.user_id}")
+
+
+@app.route('/posts/<int:post_id>/delete', methods=["POST"])
+def posts_destroy(post_id):
+    """Handle form submission for deleting an existing post"""
+
+    post = Post.query.get_or_404(post_id)
+
+    db.session.delete(post)
+    db.session.commit()
+    flash(f"Post '{post.title} deleted.")
+
+    return redirect(f"/users/{post.user_id}")
